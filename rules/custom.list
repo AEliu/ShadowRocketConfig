@@ -1,0 +1,6 @@
+# Highest priority within the config; first domain match wins.
+# DOMAIN-SUFFIX,example.com,PROXY
+# DOMAIN,downloads.example.com,DIRECT
+# DOMAIN,ads.example.com,REJECT
+# IP-CIDR,203.0.113.8/32,PROXY,no-resolve
+# LAN TUN exclusions take effect before these rules; see docs/design.md.

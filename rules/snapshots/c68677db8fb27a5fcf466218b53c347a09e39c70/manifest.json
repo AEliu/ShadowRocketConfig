@@ -1,0 +1,22 @@
+{
+  "repository": "Loyalsoldier/surge-rules",
+  "revision": "c68677db8fb27a5fcf466218b53c347a09e39c70",
+  "files": {
+    "proxy": {
+      "sha256": "149db07d1c654918f1537afa1e4bbbfc8abcc8ad9f433bec23f2298d8625cb2a",
+      "count": 27335
+    },
+    "direct": {
+      "sha256": "3c8af27208a26c462ae8a9f6ed310c21f5347660945f6a2ea95fdd400a2f8802",
+      "count": 110189
+    },
+    "cncidr": {
+      "sha256": "66b10b3d9973c88def897e221b5837f8c589a1cd017f35eff1d12e8ddb49f1aa",
+      "count": 9662
+    },
+    "apple": {
+      "sha256": "0ae52311f528d0a188439ffd6989328a952a0a0e560f701f0b151505a2457873",
+      "count": 165
+    }
+  }
+}
