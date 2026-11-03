@@ -6,10 +6,8 @@ import time
 import urllib.request
 
 ENDPOINTS = (
-    "https://dns.alidns.com/dns-query",
+    "https://223.5.5.5/dns-query",
     "https://doh.pub/dns-query",
-    "https://1.1.1.1/dns-query",
-    "https://8.8.8.8/dns-query",
 )
 
 

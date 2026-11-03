@@ -16,7 +16,7 @@ SOURCES = {"apple": "DIRECT", "proxy": "PROXY", "direct": "DIRECT", "cncidr": "D
 MIN_COUNTS = {"apple": 10, "proxy": 1000, "direct": 10000, "cncidr": 1000}
 MAX_BYTES = 16 * 1024 * 1024
 DOMAIN_TYPES = {"DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD"}
-IP_TYPES = {"IP-CIDR": 4, "IP-CIDR6": 6}
+IP_TYPES = {"IP-CIDR": (4, 6), "IP-CIDR6": (6,)}
 
 
 def require(condition, message):
@@ -53,7 +53,7 @@ def validate_rules(text, source=None):
         value = fields[1]
         if kind in IP_TYPES:
             net = ipaddress.ip_network(value, strict=True)
-            require(net.version == IP_TYPES[kind], f"IP family mismatch: {line}")
+            require(net.version in IP_TYPES[kind], f"IP family mismatch: {line}")
             require(net.prefixlen > 0, f"Catch-all network forbidden: {line}")
         else:
             require(re.fullmatch(r"[a-zA-Z0-9_.-]+", value) is not None,
@@ -219,14 +219,13 @@ def validate_config(text):
         key, value = [s.strip() for s in line.split("=", 1)]
         require(key not in settings, f"Duplicate general key: {key}")
         settings[key] = value
-    for key in ("dns-server", "direct-dns-server", "fallback-dns-server", "proxy-dns-server"):
+    for key in ("dns-server", "fallback-dns-server"):
         require(all(v.strip().startswith("https://") for v in settings[key].split(",")),
                 f"{key}: expected encrypted resolvers")
-    for key in ("direct-dns-server", "proxy-dns-server"):
         require(all("#proxy" not in v for v in settings[key].split(",")),
-                f"{key}: proxy dependency would break local DNS/bootstrap intent")
-    for key in ("dns-server", "fallback-dns-server"):
-        require(all(v.endswith("#proxy") for v in settings[key].split(",")), f"{key}: missing proxy routing")
+                f"{key}: DNS/bootstrap must not depend on the proxy node")
+    require(not {"direct-dns-server", "proxy-dns-server"} & settings.keys(),
+            "Separate DNS overrides are outside this simplified profile")
     for key in ("dns-direct-system", "always-ip-address", "dns-direct-fallback-proxy"):
         require(settings[key] == "false", f"Unsafe {key}")
     require(settings["udp-policy-not-supported-behaviour"] == "REJECT", "UDP must not fall back to DIRECT")

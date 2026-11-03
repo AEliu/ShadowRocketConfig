@@ -132,11 +132,22 @@ class LifecycleTests(unittest.TestCase):
             with self.subTest(rule=bad), self.assertRaises(ValueError):
                 m.validate_rules(bad)
 
+    def test_shadowrocket_accepts_dual_stack_ip_cidr_and_ipv6_alias(self):
+        for rule in ("IP-CIDR,192.168.1.0/24,DIRECT,no-resolve",
+                     "IP-CIDR,fd00::/8,DIRECT,no-resolve",
+                     "IP-CIDR6,fd00::/8,DIRECT,no-resolve"):
+            with self.subTest(rule=rule):
+                self.assertEqual(m.validate_rules(rule), [rule])
+        with self.assertRaisesRegex(ValueError, "family mismatch"):
+            m.validate_rules("IP-CIDR6,192.168.1.0/24,DIRECT,no-resolve")
+
     def test_dns_and_fake_ip_invariants(self):
         self.install()
         good = m.render(self.root)
         for old, new in (("dns-direct-system = false", "dns-direct-system = true"),
-                         ("fallback-dns-server = https://8.8.8.8/dns-query#proxy", "fallback-dns-server = system"),
+                         ("fallback-dns-server = https://doh.pub/dns-query#no-h3", "fallback-dns-server = system"),
+                         ("https://223.5.5.5/dns-query#no-h3", "https://223.5.5.5/dns-query#proxy"),
+                         ("https://doh.pub/dns-query#no-h3", "https://doh.pub/dns-query#proxy"),
                          ("10.0.0.0/8,127.0.0.0/8", "198.18.0.0/15,127.0.0.0/8"),
                          ("FINAL,PROXY", "FINAL,DIRECT")):
             with self.subTest(change=old), self.assertRaises(ValueError):
@@ -176,12 +187,13 @@ class RealSnapshotTests(unittest.TestCase):
                 self.assertEqual(self.route(host), "DIRECT")
 
     def test_foreign_unknown_and_suffix_boundary(self):
-        for host in ("github.com", "www.google.com", "openai.com", "unknown.invalid", "qq.com.evil.invalid"):
+        for host in ("github.com", "www.google.com", "openai.com", "unknown.invalid", "qq.com.evil.invalid",
+                     "adservice.google.com", "account-cn.alibabacloud.com"):
             with self.subTest(host=host):
                 self.assertEqual(self.route(host), "PROXY")
 
     def test_lan_and_literal_ips(self):
-        for host in ("nas.local", "nas.home.arpa", "192.168.1.10", "10.0.0.1", "fd00::1", "fe80::1", "1.0.1.1"):
+        for host in ("nas.local", "nas.home.arpa", "192.168.1.10", "10.0.0.1", "fd00::1", "fe80::1", "1.0.1.1", "2400:3200::1"):
             with self.subTest(host=host):
                 self.assertEqual(self.route(host), "DIRECT")
         for host in ("1.1.1.1", "198.18.0.1", "2606:4700:4700::1111"):

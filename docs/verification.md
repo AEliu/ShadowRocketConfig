@@ -1,66 +1,51 @@
-# 自动验证记录
+# 本次审查验证记录
 
-日期：2026-11-03（Asia/Shanghai）。运行环境：Windows PowerShell、Python 3.13。没有连接 iPhone，也没有在 Shadowrocket 内导入/编译配置。GitHub Actions 已配置，远端尚未运行。
+日期：2026-11-03（Asia/Shanghai）。环境：Windows PowerShell、Python 3.13。基线提交：`17deec2`。本次没有连接 iPhone，没有运行远端 CI。
 
-## 已执行
+## 自动验证结果
 
-| 验证 | 结果 |
+| 命令/检查 | 结果 |
 | --- | --- |
-| 下载固定提交的实际规则 | 4 份均成功；保存原始字节与 SHA256 |
-| `python scripts/manage.py update` | 成功查询 release 分支；与已锁定提交一致，使用核验后的本地快照 |
-| `python scripts/manage.py build` | 生成精简版和离线版 |
-| `python scripts/manage.py check` | 通过：规则语法、数据完整性、关键 DNS/路由约束、输出与源文件一致性 |
-| `python -m unittest discover -s tests -v` | **15/15 通过**，无需网络 |
-| 再次渲染与输出逐字节对照 | 两份输出完全一致 |
-| `python scripts/probe_dns.py` | 4/4 端点返回有效 RFC 8484 A 记录响应；保持默认 TLS 证书验证 |
+| `python scripts/manage.py build` | 两份配置生成成功 |
+| `python scripts/manage.py check` | 快照哈希、规则格式、DNS/路由约束及输出一致性通过 |
+| `python -m unittest discover -s tests -v` | **16/16 通过**，无需在线下载 |
+| `python scripts/probe_dns.py` | 两个现用端点均返回有效 RFC 8484 应答，默认 TLS 证书校验开启 |
+| 与 HEAD 的规则段逐字节比较 | 规则段和 Host 段不变 |
+| `git diff -- rules/` | 无变化；原始快照及锁文件未改动 |
+| `git diff --check`、文档链接检查 | 通过 |
 
-规则提交：`c68677db8fb27a5fcf466218b53c347a09e39c70`。
+新增/扩展的测试检查：IP-CIDR 接受 IPv4/IPv6、IP-CIDR6 拒绝 IPv4；DNS 主备不能意外依赖节点或退回 system；国内公网 IPv6 直连；代理/直连集合重叠时保持代理优先。下载失败、异常数据、校验失败、陈旧输出、不可变 URL、离线回滚及自定义规则保留等原有测试继续通过。
 
-| 集合 | 有效条数 |
-| --- | ---: |
-| Apple 国内直连例外 | 165 |
-| Proxy | 27,335 |
-| Direct | 110,189 |
-| China IPv4 | 9,662 |
-| 合计 | 147,351 |
+测试名称中涉及 Shadowrocket 的行为，只表示依照公开资料检查本项目允许的语法及分流意图；不代表运行了其解析器或内核。
 
-主配置：46 行、2,186 字节。离线配置：147,397 行、5,071,756 字节（约 4.84 MiB）。这些数字只对应本记录中的配置和快照。
+## 规模与输出
 
-输出 SHA256：
+上游提交仍为 `c68677db8fb27a5fcf466218b53c347a09e39c70`。Apple 165、Proxy 27,335、Direct 110,189、China IP 9,662，共 **147,351 条**。China IP 中 IPv4 为 6,183 条，IPv6 为 3,479 条；前一版文档的“仅 IPv4”描述已纠正。
+
+| 输出 | 字节 | 行数 |
+| --- | ---: | ---: |
+| shadowrocket.conf | 2,007 | 44 |
+| dist/shadowrocket-offline.conf | 5,071,577 | 147,395 |
 
 ```text
-shadowrocket.conf
-3211d99e64effc3e111cd4c7101018a56a6244ce2db43adb793c43eaa6c2be05
+shadowrocket.conf SHA256
+f8cba82a6e8590ae4d2e87473a8c8a059e25a6273e7c0e33d5790b2ccf47998c
 
-dist/shadowrocket-offline.conf
-a6a679cf0c2a7b7a5d7106c67b38edff353e02cd1c64fd737e4bdc3888e17b01
+dist/shadowrocket-offline.conf SHA256
+40812c48f9c94d834bd4eee86a2162ae330890dccc2bec0ed8e8e3d14004d30e
 ```
 
-## 自动测试覆盖
+本次实际比较了删 Proxy、换成同上游 GFW、域名后缀冗余，以及更小的 blackmatrix7/ACL4SSR 国内列表；结果和保留原因见 [审查记录](design.md)。没有声称当前规则数量最优，也没有把主配置行数的减少当作运行规则数减少。
 
-- 更新 → 构建 → 回滚全过程；回滚不联网并保留自定义规则。
-- 中途下载失败不切换活动锁文件、不改变已生成主配置。
-- HTML 错误页、嵌入策略、FINAL 注入、未知规则类型被拒绝。
-- 规则数量变化超过 30% 时停止切换，显式覆盖后可继续。
-- 规则哈希损坏阻止构建和回滚。
-- 生成文件陈旧、路径穿越或非完整 SHA 被识别。
-- 分支只解析一次，后续文件均使用同一不可变提交 URL；重复更新验证已有快照。
-- 禁止意外系统 DNS、IP 规则触发解析、Fake-IP 网段旁路、最终直连等关键回归。
-- 实际快照的国内域名、Apple CDN、国外域名、未知域名、后缀边界、LAN/IPv6 LAN、字面 IP 与精简/离线顺序。
+## 电脑侧 DoH 探测
 
-测试中的小型规则匹配器是项目意图模型，不能替代 Shadowrocket 的规则编译、DNS 缓存、CNAME、IPv6、UDP 或 TUN 实现；故障注入使用临时目录与受控假下载响应，没有故意破坏真实快照。
-
-## DoH 网络探测
-
-| 端点 | 结果 | 单次耗时 |
+| 端点 | 结果 | 本次单次耗时 |
 | --- | --- | ---: |
-| `dns.alidns.com` | 有效应答，2 条 answer | 256 ms |
-| `doh.pub` | 有效应答，2 条 answer | 3,287 ms |
-| `1.1.1.1` | 有效应答，2 条 answer | 1,008 ms |
-| `8.8.8.8` | 有效应答，2 条 answer | 2,014 ms |
+| https://223.5.5.5/dns-query | 有效应答，2 条 answer | 113 ms |
+| https://doh.pub/dns-query | 有效应答，2 条 answer | 169 ms |
 
-查询域名为 `example.com`。结果代表运行电脑及其系统/环境代理路径，不代表 iPhone 国内直连延迟，不能据此给解析器做速度排名，也不能证明 `#proxy` 在手机生效。DNSPod 此次超过 2 秒，说明备用路径必须纳入手机测试，不能只验证正常情况。
+查询为 `example.com` 的 A 记录。结果包含运行电脑可能使用的系统/环境代理路径，不是 iPhone 直连延迟，也不是备用 DNS 时序测试。没有为测故障而修改电脑或路由器的网络设置。
 
-## 尚未验证
+## 尚待手机验证
 
-手机导入与规则编译、约 15 万条离线规则的内存/启动开销、各 DNS 参数在实际版本的交互、UDP/TCP DNS 劫持、冷启动引导、外层抓包、国内 CDN 调度、节点远端解析、IPv6-only/NAT64、Bonjour/AirPlay、锁屏与 Wi-Fi/蜂窝切换，以及实机更新/回滚行为均未验证。执行方法见 [iPhone 验收步骤](iphone-test.md)。
+三组检查见 [iPhone 验收](iphone-test.md)：导入与 IPv6/LAN；节点失效、主备 DNS 和冷启动；网络切换与恢复。约 15 万条规则的手机编译/内存开销、端点引导、DNS 隐私边界、IPv6-only/NAT64 仍未验证。不保证“零泄漏”或“已解决手机稳定性问题”。

@@ -2,6 +2,8 @@
 
 国内常用服务直连，国外及未匹配流量代理。主配置只有约 50 行；节点、订阅和密码由 Shadowrocket App 管理，不放入仓库。开发与维护只需要 Python 3.10+，无第三方 Python 包、数据库或后台服务。
 
+DNS 使用独立于代理节点的阿里 DoH 主解析、DNSPod DoH 备用；普通代理目标由节点解析。客户端额外 DNS 查询可能交国内解析器，这是稳定性优先的明确取舍，不承诺所有查询都经代理。规则保留 147,351 条，裁剪评估与兼容性依据见 [审查记录](docs/design.md)。
+
 基于 2026-11-03 查阅的文档，目标版本为 **Shadowrocket 2.2.93 或更新版本**。这是项目选定的验证基线，并非所有参数的最低支持版本。当前只完成电脑侧验证，**尚未在 iPhone 导入或实测**。
 
 ## 使用
@@ -45,7 +47,7 @@ DOMAIN,ads.example.net,REJECT
 IP-CIDR,203.0.113.8/32,PROXY,no-resolve
 ```
 
-支持 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`IP-CIDR6`，策略限 `DIRECT / PROXY / REJECT`。IP 规则必须带 `no-resolve`。不支持向这里插入 `FINAL`、远程配置、脚本或任意策略组。
+支持 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`IP-CIDR6`，策略限 `DIRECT / PROXY / REJECT`。`IP-CIDR` 可填写 IPv4 或 IPv6，`IP-CIDR6` 仅限 IPv6；IP 规则必须带 `no-resolve`。不支持向这里插入 `FINAL`、远程配置、脚本或任意策略组。
 
 NAS 等优先使用 IP 或 Bonjour 的 `.local` 名称。`home.arpa` 并不自带 DNS 服务：如路由器没有提供适用的本地解析，给 `config/hosts.conf` 添加 `nas.home.arpa = 192.168.1.10`。其他内网域名同时添加 DIRECT 规则及 `office.example.com = server:192.168.1.1`，仅在该内网下使用；不要把所有域名交给路由器。单标签主机名、企业搜索域与 Tailscale MagicDNS 不在默认支持范围。
 
@@ -76,7 +78,7 @@ python scripts/manage.py build
 python scripts/manage.py check
 ```
 
-回滚完全离线，先核验旧快照，保留当前自定义规则与配置逻辑。然后重新导入手机；仓库回滚不会遥控手机。完整配置逻辑回滚使用 Git 恢复 `config/`、`rules/custom.list`、`rules/lan.list` 和对应锁文件后重建。初始仓库尚无历史提交，完整历史需要自行提交后才存在。
+回滚完全离线，先核验旧快照，保留当前自定义规则与配置逻辑。然后重新导入手机；仓库回滚不会遥控手机。完整配置逻辑回滚使用 Git 恢复 `config/`、`rules/custom.list`、`rules/lan.list` 和对应锁文件后重建。恢复此前 DNS 方案时还需恢复相应版本的构建脚本及测试，避免新校验器拒绝旧配置。
 
 快照不自动清理，以便离线回滚。上游 release 分支可能重建历史，固定 SHA 的远程 URL 不保证永久可达；仓库中保留的原始规则可继续生成离线版。
 
@@ -89,7 +91,7 @@ python -m unittest discover -s tests -v
 python scripts/probe_dns.py
 ```
 
-已有离线 GitHub Actions 校验流程，未在远端运行。规则匹配测试是本项目支持子集的意图检查，不是 Shadowrocket 内核或其编译器。
+已有不依赖在线规则下载的 GitHub Actions 校验流程；本次修改未在远端运行。规则匹配测试是本项目支持子集的意图检查，不是 Shadowrocket 内核或其编译器。
 
 - [设计取舍、文档与规则来源](docs/design.md)
 - [iPhone 验收方法](docs/iphone-test.md)
