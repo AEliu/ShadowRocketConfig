@@ -20,6 +20,8 @@ class LifecycleTests(unittest.TestCase):
         (self.root / "rules").mkdir()
         for name in ("custom.list", "lan.list"):
             shutil.copy(m.ROOT / "rules" / name, self.root / "rules" / name)
+        shutil.copy(m.ROOT / "rules" / "icloud-lock.json", self.root / "rules" / "icloud-lock.json")
+        shutil.copytree(m.ROOT / "rules" / "icloud-snapshots", self.root / "rules" / "icloud-snapshots")
         self.enterContext(patch.dict(m.MIN_COUNTS, dict.fromkeys(m.SOURCES, 1)))
         self.enterContext(contextlib.redirect_stdout(io.StringIO()))
         self.a, self.b = "a" * 40, "b" * 40
@@ -141,6 +143,29 @@ class LifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "family mismatch"):
             m.validate_rules("IP-CIDR6,192.168.1.0/24,DIRECT,no-resolve")
 
+    def test_icloud_update_changes_both_outputs(self):
+        revision = "c" * 40
+        _, old = m.load_icloud(self.root)
+        payload = ("\n".join(old + ["DOMAIN,new-icloud.example"]) + "\n").encode()
+        m.update_icloud(self.root, revision, downloader=lambda url: payload)
+        self.install()
+        compact = m.render(self.root)
+        offline = m.render(self.root, standalone=True)
+        self.assertIn(m.icloud_url(revision) + ",DIRECT", compact)
+        self.assertIn("DOMAIN,new-icloud.example,DIRECT", offline)
+
+    def test_icloud_update_rejects_injected_rules_and_corruption(self):
+        revision = "c" * 40
+        before = (self.root / "rules" / "icloud-lock.json").read_bytes()
+        with self.assertRaises(ValueError):
+            m.update_icloud(self.root, revision, downloader=lambda url: b"DOMAIN,evil.example,DIRECT\n")
+        self.assertEqual(before, (self.root / "rules" / "icloud-lock.json").read_bytes())
+        current, _ = m.load_icloud(self.root)
+        path = self.root / "rules" / "icloud-snapshots" / f"{current}.list"
+        path.write_bytes(path.read_bytes() + b"DOMAIN,tampered.example\n")
+        with self.assertRaisesRegex(ValueError, "SHA256"):
+            m.load_icloud(self.root)
+
     def test_dns_and_fake_ip_invariants(self):
         self.install()
         good = m.render(self.root)
@@ -188,7 +213,8 @@ class RealSnapshotTests(unittest.TestCase):
 
     def test_icloud_direct_before_proxy_rules(self):
         for host in ("www.icloud.com", "p01.icloud.com.cn", "files.icloud-content.com",
-                     "service.icloud-sandbox.com", "www-cdn.icloud.com.akadns.net"):
+                     "service.icloud-sandbox.com", "www-cdn.icloud.com.akadns.net",
+                     "www.me.com", "service.apple-cloudkit.com", "icloud.cn"):
             with self.subTest(host=host):
                 self.assertEqual(self.route(host), "DIRECT")
 
@@ -210,7 +236,8 @@ class RealSnapshotTests(unittest.TestCase):
         compact = m.render(m.ROOT)
         positions = [compact.index(f"/ruleset/{name}.txt") for name in m.SOURCES]
         self.assertEqual(positions, sorted(positions))
-        self.assertEqual(compact.count("RULE-SET,"), 4)
+        self.assertEqual(compact.count("RULE-SET,"), 5)
+        self.assertLess(compact.index(m.icloud_url(m.load_icloud(m.ROOT)[0])), positions[0])
         self.assertNotIn("RULE-SET,", self.config)
         self.assertIn(",DIRECT,no-resolve", self.config)
 

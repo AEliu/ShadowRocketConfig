@@ -14,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = "Loyalsoldier/surge-rules"
 SOURCES = {"apple": "DIRECT", "proxy": "PROXY", "direct": "DIRECT", "cncidr": "DIRECT"}
 MIN_COUNTS = {"apple": 10, "proxy": 1000, "direct": 10000, "cncidr": 1000}
+ICLOUD_REPO = "blackmatrix7/ios_rule_script"
+ICLOUD_PATH = "rule/Shadowrocket/iCloud/iCloud.list"
+MIN_COUNTS["icloud"] = 10
 MAX_BYTES = 16 * 1024 * 1024
 DOMAIN_TYPES = {"DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD"}
 IP_TYPES = {"IP-CIDR": (4, 6), "IP-CIDR6": (6,)}
@@ -173,12 +176,56 @@ def rollback(root, revision):
     print(f"Restored {revision}. Run build, then re-import the config on iPhone.")
 
 
+def icloud_url(revision):
+    return f"https://raw.githubusercontent.com/{ICLOUD_REPO}/{revision}/{ICLOUD_PATH}"
+
+
+def load_icloud(root):
+    lock = json.loads(read(root / "rules" / "icloud-lock.json"))
+    require(lock["version"] == 1 and lock["repository"] == ICLOUD_REPO, "iCloud lock identity mismatch")
+    revision = revision_id(lock["revision"])
+    raw = (root / "rules" / "icloud-snapshots" / f"{revision}.list").read_bytes()
+    require(digest(raw) == lock["sha256"], "icloud: SHA256 mismatch")
+    rules = validate_rules(raw.decode("utf-8"), "icloud")
+    require(len(rules) == lock["count"], "icloud: count mismatch")
+    return revision, rules
+
+
+def update_icloud(root, revision=None, allow_large_change=False, downloader=fetch):
+    if revision is None:
+        info = json.loads(downloader(f"https://api.github.com/repos/{ICLOUD_REPO}/git/ref/heads/master"))
+        revision = info["object"]["sha"]
+    revision_id(revision)
+    raw = downloader(icloud_url(revision))
+    require(0 < len(raw) <= MAX_BYTES, "Empty or oversized iCloud ruleset")
+    parsed = validate_rules(raw.decode("utf-8"), "icloud")
+    lock_path = root / "rules" / "icloud-lock.json"
+    if lock_path.exists():
+        _, old = load_icloud(root)
+        require(allow_large_change or abs(len(parsed) - len(old)) / len(old) <= 0.30,
+                "icloud: count changed >30%; inspect snapshot, then use --allow-large-change")
+        print(f"icloud: {len(old)} -> {len(parsed)}")
+    snapshot = root / "rules" / "icloud-snapshots" / f"{revision}.list"
+    if snapshot.exists():
+        require(snapshot.read_bytes() == raw, "Existing iCloud snapshot differs")
+    else:
+        atomic_write(snapshot, raw)
+    atomic_write(lock_path, json_bytes({"version": 1, "repository": ICLOUD_REPO,
+                                      "revision": revision, "sha256": digest(raw), "count": len(parsed)}))
+    print(f"Selected iCloud {revision}. Run build, then check.")
+
+
 def render(root, standalone=False):
     revision = current(root)
     _, data = load_snapshot(root, revision)
+    icloud_revision, icloud = load_icloud(root)
     custom = validate_rules(read(root / "rules" / "custom.list"))
     lan = validate_rules(read(root / "rules" / "lan.list"))
-    upstream = []
+    if standalone:
+        upstream = [f"# {ICLOUD_REPO}@{icloud_revision}: iCloud"]
+        upstream.extend(f"{line},DIRECT" for line in icloud)
+    else:
+        upstream = [f"RULE-SET,{icloud_url(icloud_revision)},DIRECT"]
     for name, policy in SOURCES.items():
         option = ",no-resolve" if name == "cncidr" else ""
         if standalone:
@@ -239,6 +286,9 @@ def validate_config(text):
     for rule in rules[:-1]:
         if rule.startswith("RULE-SET,"):
             parts = rule.split(",")
+            if re.fullmatch(r"https://raw\.githubusercontent\.com/blackmatrix7/ios_rule_script/[0-9a-f]{40}/rule/Shadowrocket/iCloud/iCloud\.list", parts[1]):
+                require(parts[2:] == ["DIRECT"], f"Unexpected iCloud policy/options: {rule}")
+                continue
             match = re.fullmatch(r"https://raw\.githubusercontent\.com/Loyalsoldier/surge-rules/([0-9a-f]{40})/ruleset/(apple|proxy|direct|cncidr)\.txt", parts[1])
             require(match is not None, f"Unpinned or unknown ruleset: {rule}")
             name = match[2]
@@ -264,6 +314,7 @@ def check(root):
         require(read(offline) == render(root, standalone=True), "Offline config is stale; run build")
     manifest, _ = load_snapshot(root, current(root))
     print("PASS: snapshot hashes, rule syntax, DNS/routing invariants, reproducible config")
+    print(f"iCloud rules: {len(load_icloud(root)[1])}")
     print("Rule counts: " + ", ".join(f"{n}={v['count']}" for n, v in manifest["files"].items()))
 
 
@@ -273,6 +324,9 @@ def main():
     update_parser = sub.add_parser("update", help="Download/validate rules and select revision; build separately")
     update_parser.add_argument("--revision")
     update_parser.add_argument("--allow-large-change", action="store_true")
+    icloud_parser = sub.add_parser("update-icloud", help="Download and select iCloud snapshot; build separately")
+    icloud_parser.add_argument("--revision")
+    icloud_parser.add_argument("--allow-large-change", action="store_true")
     back = sub.add_parser("rollback", help="Select an existing verified snapshot without network")
     back.add_argument("revision")
     for name in ("build", "check"):
@@ -281,6 +335,8 @@ def main():
     try:
         if args.command == "update":
             update(ROOT, args.revision, args.allow_large_change)
+        elif args.command == "update-icloud":
+            update_icloud(ROOT, args.revision, args.allow_large_change)
         elif args.command == "rollback":
             rollback(ROOT, args.revision)
         else:

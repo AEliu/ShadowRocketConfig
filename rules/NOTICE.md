@@ -17,3 +17,5 @@ felixonmars/dnsmasq-china-list、17mon/china_ip_list 等项目。
 离线生成配置会为原始规则补充 DIRECT/PROXY 策略，并为 IP 规则补充
 no-resolve。分发这个派生文件时，请同时提供本说明、许可证和对应规则快照，
 不要只分发一个去掉来源的规则文件。规则分类最终以上游维护者判断为准。
+
+`icloud-snapshots/<commit>.list` 是 [blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script) 的原始 iCloud Shadowrocket 列表；提交、SHA256 和条数记录于 `icloud-lock.json`。该仓库根目录许可证为 GNU GPL v2，原文见 `LICENSE-blackmatrix7`。离线输出为其规则添加 DIRECT 策略。

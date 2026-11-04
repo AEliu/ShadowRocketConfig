@@ -2,7 +2,7 @@
 
 国内常用服务直连，国外及未匹配流量代理。主配置只有约 50 行；节点、订阅和密码由 Shadowrocket App 管理，不放入仓库。开发与维护只需要 Python 3.10+，无第三方 Python 包、数据库或后台服务。
 
-DNS 使用独立于代理节点的阿里 DoH 主解析、DNSPod DoH 备用；普通代理目标由节点解析。客户端额外 DNS 查询可能交国内解析器，这是稳定性优先的明确取舍，不承诺所有查询都经代理。规则保留 147,351 条，裁剪评估与兼容性依据见 [审查记录](docs/design.md)。
+DNS 使用独立于代理节点的阿里 DoH 主解析、DNSPod DoH 备用；普通代理目标由节点解析。客户端额外 DNS 查询可能交国内解析器，这是稳定性优先的明确取舍，不承诺所有查询都经代理。原有上游规则保留 147,351 条，另加 iCloud 规则，裁剪评估与兼容性依据见 [审查记录](docs/design.md)。
 
 基于 2026-11-03 查阅的文档，目标版本为 **Shadowrocket 2.2.93 或更新版本**。这是项目选定的验证基线，并非所有参数的最低支持版本。当前只完成电脑侧验证，**尚未在 iPhone 导入或实测**。
 
@@ -16,7 +16,7 @@ DNS 使用独立于代理节点的阿里 DoH 主解析、DNSPod DoH 备用；普
    python scripts/manage.py check
    ```
 
-3. 如果手机能访问 GitHub Raw，也可导入根目录的 `shadowrocket.conf`。进入配置详情确认 **4 个规则集** 均下载并编译成功；首次下载失败时不要继续依赖这个配置，改用离线版。需要代理才能下载时，临时切换“全局路由 → 代理”，下载完成后恢复“配置”。
+3. 如果手机能访问 GitHub Raw，也可导入根目录的 `shadowrocket.conf`。进入配置详情确认 **5 个规则集** 均下载并编译成功；首次下载失败时不要继续依赖这个配置，改用离线版。需要代理才能下载时，临时切换“全局路由 → 代理”，下载完成后恢复“配置”。
 4. 选中导入的配置，首页“全局路由”设为 **配置**，连接 VPN。不要同时启用改变 DNS/规则的模块；模块可能优先于本配置。
 5. 按 [iPhone 验收步骤](docs/iphone-test.md) 检查分流、DNS、局域网与网络切换。
 
@@ -30,6 +30,7 @@ DNS 使用独立于代理节点的阿里 DoH 主解析、DNSPod DoH 备用；普
 | `rules/custom.list` | 自定义规则，优先于上游规则 |
 | `config/hosts.conf` | 局域网固定地址或指定内网 DNS |
 | `rules/lan.list` | 少量局域网基础规则 |
+| `rules/icloud-lock.json`、`rules/icloud-snapshots/` | blackmatrix7 iCloud 上游提交、哈希及原始快照 |
 | `rules/lock.json` | 当前使用的上游提交 |
 | `rules/snapshots/<SHA>/` | 未改写的上游数据、SHA256 与条数，纳入 Git |
 | `shadowrocket.conf` | 可导入的精简配置，生成文件，纳入 Git |
@@ -52,6 +53,16 @@ IP-CIDR,203.0.113.8/32,PROXY,no-resolve
 NAS 等优先使用 IP 或 Bonjour 的 `.local` 名称。`home.arpa` 并不自带 DNS 服务：如路由器没有提供适用的本地解析，给 `config/hosts.conf` 添加 `nas.home.arpa = 192.168.1.10`。其他内网域名同时添加 DIRECT 规则及 `office.example.com = server:192.168.1.1`，仅在该内网下使用；不要把所有域名交给路由器。单标签主机名、企业搜索域与 Tailscale MagicDNS 不在默认支持范围。
 
 修改后执行 `build`、`check`，重新导入手机并切换到新配置。不要直接编辑生成文件，否则下次构建会覆盖。TUN 旁路的局域网流量不会进入规则引擎，因此自定义 PROXY 规则不能覆盖这些旁路路由。
+
+iCloud 使用 [blackmatrix7 上游列表](https://github.com/blackmatrix7/ios_rule_script/blob/master/rule/Shadowrocket/iCloud/iCloud.list)，在其他上游规则之前直连；其规则包括部分非 iCloud 专属的 Apple 域名。更新此列表后需构建、校验并重新导入：
+
+```powershell
+python scripts/manage.py update-icloud
+python scripts/manage.py build
+python scripts/manage.py check
+```
+
+此列表独立锁定提交，不会随下面的 Loyalsoldier 更新或回滚而变化。数量变化超过 30% 时，检查上游变更后可用 `update-icloud --allow-large-change` 确认。
 
 ## 独立更新规则
 
