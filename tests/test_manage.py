@@ -186,6 +186,12 @@ class RealSnapshotTests(unittest.TestCase):
             with self.subTest(host=host):
                 self.assertEqual(self.route(host), "DIRECT")
 
+    def test_icloud_direct_before_proxy_rules(self):
+        for host in ("www.icloud.com", "p01.icloud.com.cn", "files.icloud-content.com",
+                     "service.icloud-sandbox.com", "www-cdn.icloud.com.akadns.net"):
+            with self.subTest(host=host):
+                self.assertEqual(self.route(host), "DIRECT")
+
     def test_foreign_unknown_and_suffix_boundary(self):
         for host in ("github.com", "www.google.com", "openai.com", "unknown.invalid", "qq.com.evil.invalid",
                      "adservice.google.com", "account-cn.alibabacloud.com"):

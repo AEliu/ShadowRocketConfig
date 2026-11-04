@@ -4,3 +4,10 @@
 # DOMAIN,ads.example.com,REJECT
 # IP-CIDR,203.0.113.8/32,PROXY,no-resolve
 # LAN TUN exclusions take effect before these rules; see docs/design.md.
+
+# iCloud services must precede upstream proxy rules.
+DOMAIN-SUFFIX,icloud.com,DIRECT
+DOMAIN-SUFFIX,icloud.com.cn,DIRECT
+DOMAIN-SUFFIX,icloud-content.com,DIRECT
+DOMAIN-SUFFIX,icloud-sandbox.com,DIRECT
+DOMAIN,www-cdn.icloud.com.akadns.net,DIRECT
